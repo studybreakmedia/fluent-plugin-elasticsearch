@@ -1132,6 +1132,35 @@ class ElasticsearchOutput < Test::Unit::TestCase
     )
   end
 
+  def test_upsert_should_set_version_and_version_type
+    driver.configure("write_operation upsert
+                      id_key id
+                      version_type force
+                      version_for_update_key zip.zam
+                     ")
+    stub_elastic_ping
+    stub_elastic
+    driver.emit("id" => 1, "foo" => "bar", "baz" => "quix", "zip" => {"zam" => 2})
+    driver.run
+    assert(
+      index_cmds[1]["doc"] == {
+        "id" => 1,
+        "foo" => "bar",
+        "baz" => "quix",
+        "zip" => {"zam" => 2},
+      }
+    )
+    assert(
+      index_cmds[0]["update"] == {
+        "_id" => 1,
+        "_index" => "fluentd",
+        "_type" => "fluentd",
+        "version" => 2,
+        "version_type" => "force"
+      }
+    )
+  end
+
   def test_create_should_write_create_op
     driver.configure("write_operation create
                       id_key request_id")

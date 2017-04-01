@@ -40,6 +40,8 @@ Note: For Amazon Elasticsearch Service please consider using [fluent-plugin-aws-
   + [remove_keys](#remove_keys)
   + [remove_keys_on_update](#remove_keys_on_update)
   + [remove_keys_on_update_key](#remove_keys_on_update_key)
+  + [version_for_update_key](#version_for_update_key)
+  + [version_type](#version_type)
   + [write_operation](#write_operation)
   + [time_parse_error_tag](#time_parse_error_tag)
   + [reconnect_on_error](#reconnect_on_error)

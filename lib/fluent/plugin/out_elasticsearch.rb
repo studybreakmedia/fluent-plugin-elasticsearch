@@ -51,6 +51,8 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   config_param :remove_keys, :string, :default => nil
   config_param :remove_keys_on_update, :string, :default => ""
   config_param :remove_keys_on_update_key, :string, :default => nil
+  config_param :version_for_update_key, :string, :default => nil
+  config_param :version_type, :string, :default => nil
   config_param :flatten_hashes, :bool, :default => false
   config_param :flatten_hashes_separator, :string, :default => "_"
   config_param :template_name, :string, :default => nil
@@ -108,6 +110,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
     result << [@id_key, '_id'] if @id_key
     result << [@parent_key, '_parent'] if @parent_key
     result << [@routing_key, '_routing'] if @routing_key
+    result << [@version_for_update_key, 'version'] if @version_for_update_key
     result
   end
 
@@ -325,8 +328,14 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
       meta["_index".freeze] = target_index
       meta["_type".freeze] = target_type
 
+      if @version_type
+        meta["version_type".freeze] = @version_type
+      end
+
       @meta_config_map.each do |record_key, meta_key|
-        meta[meta_key] = record[record_key] if record[record_key]
+        if (record_value = get_record_value_of(record, record_key))
+          meta[meta_key] = record_value
+        end
       end
 
       if @remove_keys
@@ -338,6 +347,11 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
 
     send_bulk(bulk_message) unless bulk_message.empty?
     bulk_message.clear
+  end
+
+  # handle nested keys
+  def get_record_value_of(record, record_key)
+    record_key.split('.').reduce(record){|a, e| a[e] if a }
   end
 
   # returns [parent, child_key] of child described by path array in record's tree
