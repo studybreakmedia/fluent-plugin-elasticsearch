@@ -52,7 +52,8 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   config_param :remove_keys_on_update, :string, :default => ""
   config_param :remove_keys_on_update_key, :string, :default => nil
   config_param :version_for_update_key, :string, :default => nil
-  config_param :version_type, :string, :default => nil
+  config_param :script, :string, :default => nil
+  config_param :script_params, :hash, :default => {}
   config_param :flatten_hashes, :bool, :default => false
   config_param :flatten_hashes_separator, :string, :default => "_"
   config_param :template_name, :string, :default => nil
@@ -328,13 +329,19 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
       meta["_index".freeze] = target_index
       meta["_type".freeze] = target_type
 
-      if @version_type
-        meta["version_type".freeze] = @version_type
-      end
-
       @meta_config_map.each do |record_key, meta_key|
         if (record_value = get_record_value_of(record, record_key))
           meta[meta_key] = record_value
+        end
+      end
+
+      if @script
+        meta["script".freeze] = {
+          "inline".freeze => @script
+        }
+        if @script_params.any?
+          meta["script".freeze]["params".freeze] =
+            build_script_params(record, @script_params)
         end
       end
 
@@ -359,6 +366,10 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   def get_parent_of(record, path)
     parent_object = path[0..-2].reduce(record) { |a, e| a.is_a?(Hash) ? a[e] : nil }
     [parent_object, path[-1]]
+  end
+
+  def build_script_params(record, params)
+    Hash[params.map { |k, v| [k, get_record_value_of(record, v)] }]
   end
 
   def send_bulk(data)
