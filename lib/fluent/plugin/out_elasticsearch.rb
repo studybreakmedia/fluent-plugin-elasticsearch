@@ -251,6 +251,15 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
         body[UPSERT_OP] = record
       end
     end
+    if @script
+      script = {
+        "inline".freeze => @script
+      }
+      if @script_params.any?
+        script["params".freeze] = build_script_params(record, @script_params)
+      end
+      body["script".freeze] = script
+    end
     body
   end
 
@@ -332,16 +341,6 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
       @meta_config_map.each do |record_key, meta_key|
         if (record_value = get_record_value_of(record, record_key))
           meta[meta_key] = record_value
-        end
-      end
-
-      if @script
-        meta["script".freeze] = {
-          "inline".freeze => @script
-        }
-        if @script_params.any?
-          meta["script".freeze]["params".freeze] =
-            build_script_params(record, @script_params)
         end
       end
 

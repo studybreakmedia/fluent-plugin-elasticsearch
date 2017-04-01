@@ -1178,15 +1178,10 @@ class ElasticsearchOutput < Test::Unit::TestCase
       }
     )
     assert(
-      index_cmds[0]["update"] == {
-        "_id" => 1,
-        "_index" => "fluentd",
-        "_type" => "fluentd",
-        "script" => {
-          "inline" => "ctx._source.zip.zam < ver ? ctx.op = \"index\" : ctx.op = \"none\"",
-          "params" => {
-            "ver" => 2
-          }
+      index_cmds[1]["script"] == {
+        "inline" => "ctx._source.zip.zam < ver ? ctx.op = \"index\" : ctx.op = \"none\"",
+        "params" => {
+          "ver" => 2
         }
       }
     )
