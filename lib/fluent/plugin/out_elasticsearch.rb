@@ -60,6 +60,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   config_param :tag_key, :string, :default => 'tag'
   config_param :time_parse_error_tag, :string, :default => 'Fluent::ElasticsearchOutput::TimeParser.error'
   config_param :reconnect_on_error, :bool, :default => false
+  config_param :counters, :hash, :default => nil
 
   include Fluent::ElasticsearchIndexTemplate
 

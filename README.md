@@ -40,6 +40,7 @@ Note: For Amazon Elasticsearch Service please consider using [fluent-plugin-aws-
   + [remove_keys](#remove_keys)
   + [remove_keys_on_update](#remove_keys_on_update)
   + [remove_keys_on_update_key](#remove_keys_on_update_key)
+  + [counters](#counters)
   + [write_operation](#write_operation)
   + [time_parse_error_tag](#time_parse_error_tag)
   + [reconnect_on_error](#reconnect_on_error)
@@ -380,6 +381,39 @@ present in the record then the keys in record are used, if the `remove_keys_on_u
 ```
 remove_keys_on_update_key keys_to_skip
 ```
+
+### counters
+
+When using `update` or `upsert` operations, this setting allows for specifying
+a field to be incremented rather than overwritten.  This is done using a
+scripted update in elasticsearch.
+
+```
+counters {'counter_es_key': 'increment_key'}
+```
+
+For example, given,
+```
+counters {'userCount': 'newUsers'}
+```
+
+and the fluent event:
+
+```
+{
+  "newUsers" => 5
+}
+```
+
+And the existing elasticsearch record:
+
+```
+{
+  userCount: 10
+}
+```
+
+The elasticsearch record will be incremented to `15`.
 
 ### write_operation
 
