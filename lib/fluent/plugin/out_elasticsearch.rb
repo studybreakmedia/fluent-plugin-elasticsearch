@@ -95,6 +95,9 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
     end
 
     @meta_config_map = create_meta_config_map
+    if @counters
+      @counter_script = create_counter_script
+    end
 
     begin
       require 'oj'
@@ -224,6 +227,10 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
         header[UPDATE_OP] = meta
         msgs << @dump_proc.call(header) << BODY_DELIMITER
         msgs << @dump_proc.call(update_body(record, op)) << BODY_DELIMITER
+        if @counters
+          msgs << @dump_proc.call(header) << BODY_DELIMITER
+          msgs << @dump_proc.call(counter_body(record)) << BODY_DELIMITER
+        end
       end
     when CREATE_OP
       if meta.has_key?(ID_FIELD)
@@ -249,6 +256,28 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
       end
     end
     body
+  end
+
+  def counter_body(record)
+    @counters.each do |es_key, fluent_param|
+      @counter_script["script".freeze]["params".freeze][fluent_param] =
+        get_record_value_of(record, fluent_param) || 0
+    end
+    @counter_script
+  end
+
+  def create_counter_script
+    if @counters && @counters.any?
+      script = @counters.map do |es_key, fluent_param|
+        %Q|if (ctx._source.#{es_key} == null) { ctx._source.#{es_key} = 0 }; ctx._source.#{es_key} += #{fluent_param}|
+      end.join(";")
+      {
+        "script".freeze => {
+          "inline".freeze => script,
+          "params".freeze => {}
+        }
+      }
+    end
   end
 
   def remove_keys(record)
@@ -346,6 +375,12 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   def get_parent_of(record, path)
     parent_object = path[0..-2].reduce(record) { |a, e| a.is_a?(Hash) ? a[e] : nil }
     [parent_object, path[-1]]
+  end
+
+  # returns the value of a nested key in the record
+  # eg. get_record_value_of({foo: {bar: "baz"}}, 'foo.bar')  #==> "baz"
+  def get_record_value_of(record, record_key)
+    record_key.split('.').reduce(record){|a, e| a[e] if a }
   end
 
   def send_bulk(data)
