@@ -1,5 +1,6 @@
 require 'helper'
 require 'date'
+require 'byebug'
 
 class ElasticsearchOutput < Test::Unit::TestCase
   attr_accessor :index_cmds, :index_command_counts
@@ -1104,6 +1105,32 @@ class ElasticsearchOutput < Test::Unit::TestCase
         "baz" => "quix",
       }
     )
+  end
+
+  def test_upsert_with_counters
+    driver.configure("write_operation upsert
+                      id_key id
+                      counters {\"numFoo\": \"newFoo\"}")
+    stub_elastic_ping
+    stub_elastic
+    driver.emit("id" => 1, "newFoo" => 4)
+    driver.run
+    assert_equal({
+      "inline" =>
+        "if (ctx._source.numFoo == null) { ctx._source.numFoo = 0 }; ctx._source.numFoo += newFoo",
+      "params"=>{"newFoo"=>4}
+    }, index_cmds[3]["script"])
+  end
+
+  def test_upsert_with_counters_with_no_new_values
+    driver.configure("write_operation upsert
+                      id_key id
+                      counters {\"numFoo\": \"newFoo\"}")
+    stub_elastic_ping
+    stub_elastic
+    driver.emit("id" => 1)
+    driver.run
+    assert_equal nil, index_cmds[3]
   end
 
   def test_upsert_should_remove_keys_from_key_on_record_has_higher_presedence_than_config

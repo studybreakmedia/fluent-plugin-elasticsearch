@@ -227,7 +227,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
         header[UPDATE_OP] = meta
         msgs << @dump_proc.call(header) << BODY_DELIMITER
         msgs << @dump_proc.call(update_body(record, op)) << BODY_DELIMITER
-        if @counters
+        if @counters && counter_updates?(record)
           msgs << @dump_proc.call(header) << BODY_DELIMITER
           msgs << @dump_proc.call(counter_body(record)) << BODY_DELIMITER
         end
@@ -256,6 +256,10 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
       end
     end
     body
+  end
+
+  def counter_updates?(record)
+    @counters.any?{|_, fp| record[fp].to_i != 0 }
   end
 
   def counter_body(record)
