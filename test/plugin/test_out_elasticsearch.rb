@@ -742,7 +742,7 @@ class ElasticsearchOutput < Test::Unit::TestCase
     stub_elastic
 
     ts = "2001/02/03 13:14:01,673+02:00"
-    index = "logstash-#{Date.today.strftime("%Y.%m.%d")}"
+    index = "logstash-#{Time.now.utc.to_date.strftime("%Y.%m.%d")}"
 
     driver.emit(sample_record.merge!('@timestamp' => ts))
     driver.run
