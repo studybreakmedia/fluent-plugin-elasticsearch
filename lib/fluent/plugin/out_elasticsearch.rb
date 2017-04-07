@@ -285,6 +285,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
     keys = record[@remove_keys_on_update_key] || @remove_keys_on_update || []
     record.delete(@remove_keys_on_update_key)
     if @counters
+      @counter_increments.clear
       @counters.each do |_, fp|
         if record[fp]
           @counter_increments[fp] = record.delete(fp).to_i
