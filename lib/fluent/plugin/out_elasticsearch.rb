@@ -97,6 +97,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
     @meta_config_map = create_meta_config_map
     if @counters
       @counter_script = create_counter_script
+      @counter_increments = {}
     end
 
     begin
@@ -227,7 +228,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
         header[UPDATE_OP] = meta
         msgs << @dump_proc.call(header) << BODY_DELIMITER
         msgs << @dump_proc.call(update_body(record, op)) << BODY_DELIMITER
-        if @counters && counter_updates?(record)
+        if @counters && @counter_increments.any?
           msgs << @dump_proc.call(header) << BODY_DELIMITER
           msgs << @dump_proc.call(counter_body(record)) << BODY_DELIMITER
         end
@@ -258,22 +259,18 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
     body
   end
 
-  def counter_updates?(record)
-    @counters.any?{|_, fp| record[fp].to_i != 0 }
-  end
-
   def counter_body(record)
-    @counters.each do |es_key, fluent_param|
-      @counter_script["script".freeze]["params".freeze][fluent_param] =
-        get_record_value_of(record, fluent_param) || 0
+    @counters.each do |_, fp|
+      @counter_script["script".freeze]["params".freeze][fp] =
+        (@counter_increments[fp] || 0)
     end
     @counter_script
   end
 
   def create_counter_script
     if @counters && @counters.any?
-      script = @counters.map do |es_key, fluent_param|
-        %Q|if (ctx._source.#{es_key} == null) { ctx._source.#{es_key} = 0 }; ctx._source.#{es_key} += #{fluent_param}|
+      script = @counters.map do |es_key, fp|
+        %Q|if (ctx._source.#{es_key} == null) { ctx._source.#{es_key} = 0 }; ctx._source.#{es_key} += #{fp}|
       end.join(";")
       {
         "script".freeze => {
@@ -287,6 +284,13 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   def remove_keys(record)
     keys = record[@remove_keys_on_update_key] || @remove_keys_on_update || []
     record.delete(@remove_keys_on_update_key)
+    if @counters
+      @counters.each do |_, fp|
+        if record[fp]
+          @counter_increments[fp] = record.delete(fp).to_i
+        end
+      end
+    end
     return record unless keys.any?
     record = record.dup
     keys.each { |key| record.delete(key) }
