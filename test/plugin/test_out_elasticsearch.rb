@@ -1133,6 +1133,20 @@ class ElasticsearchOutput < Test::Unit::TestCase
     assert_equal nil, index_cmds[3]
   end
 
+  def test_upsert_with_update_if_greater
+    driver.configure("write_operation upsert
+                      id_key id
+                      update_if_greater totalFoo")
+    stub_elastic_ping
+    stub_elastic
+    driver.emit("id" => 1, "totalFoo" => 4)
+    driver.run
+    assert_equal({"inline"=>"if (totalFoo && (ctx._source.totalFoo == null || ctx._source.totalFoo < totalFoo)) { ctx._source.totalFoo = totalFoo }",
+                  "params"=>{"totalFoo"=>4}},
+                 index_cmds[3]["script"])
+  end
+
+
   def test_upsert_should_remove_keys_from_key_on_record_has_higher_presedence_than_config
     driver.configure("write_operation upsert
                       id_key id

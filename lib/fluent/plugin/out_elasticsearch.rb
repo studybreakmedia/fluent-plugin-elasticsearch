@@ -61,6 +61,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   config_param :time_parse_error_tag, :string, :default => 'Fluent::ElasticsearchOutput::TimeParser.error'
   config_param :reconnect_on_error, :bool, :default => false
   config_param :counters, :hash, :default => nil
+  config_param :update_if_greater, :string, :default => nil
 
   include Fluent::ElasticsearchIndexTemplate
 
@@ -95,7 +96,8 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
     end
 
     @meta_config_map = create_meta_config_map
-    if @counters
+    if @counters || @update_if_greater
+      @update_if_greater = @update_if_greater.split(',') if @update_if_greater
       @counter_script = create_counter_script
     end
 
@@ -228,7 +230,7 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
         header[UPDATE_OP] = meta
         msgs << @dump_proc.call(header) << BODY_DELIMITER
         msgs << @dump_proc.call(update_body(record, op)) << BODY_DELIMITER
-        if @counters && counter_increments.any?
+        if @update_if_greater || (@counters && counter_increments.any?)
           msgs << @dump_proc.call(header) << BODY_DELIMITER
           msgs << @dump_proc.call(counter_body(record, counter_increments)) << BODY_DELIMITER
         end
@@ -260,11 +262,18 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   end
 
   def update_counters(record)
-    if @counters
+    if @counters || @update_if_greater
       counter_increments = {}
-      @counters.each do |_, fp|
-        if record[fp]
-          counter_increments[fp] = record.delete(fp).to_i
+      if @counters
+        @counters.each do |_, fp|
+          if record[fp]
+            counter_increments[fp] = record.delete(fp).to_i
+          end
+        end
+      end
+      if @update_if_greater
+        @update_if_greater.each do |es_key|
+          counter_increments[es_key] = record.delete(es_key) if record[es_key]
         end
       end
       counter_increments
@@ -272,21 +281,37 @@ class Fluent::ElasticsearchOutput < Fluent::ObjectBufferedOutput
   end
 
   def counter_body(record, counter_increments)
-    @counters.each do |_, fp|
-      @counter_script["script".freeze]["params".freeze][fp] =
-        (counter_increments[fp] || 0)
+    if @counters
+      @counters.each do |_, fp|
+        @counter_script["script"]["params"][fp] =
+          (counter_increments[fp] || 0)
+      end
+    end
+    if @update_if_greater
+      @update_if_greater.each do |es_key|
+        if counter_increments[es_key]
+          @counter_script["script"]["params"][es_key] = counter_increments[es_key]
+        end
+      end
     end
     @counter_script
   end
 
   def create_counter_script
     if @counters && @counters.any?
-      script = @counters.map do |es_key, fp|
+      counter_script = @counters.map do |es_key, fp|
         %Q|if (ctx._source.#{es_key} == null) { ctx._source.#{es_key} = 0 }; ctx._source.#{es_key} += #{fp}|
       end.join(";")
+    end
+    if @update_if_greater
+      uig_script = @update_if_greater.map do |es_key|
+        %Q$if (#{es_key} && (ctx._source.#{es_key} == null || ctx._source.#{es_key} < #{es_key})) { ctx._source.#{es_key} = #{es_key} }$
+      end.join(";")
+    end
+    if counter_script || uig_script
       {
         "script".freeze => {
-          "inline".freeze => script,
+          "inline".freeze => [counter_script, uig_script].compact.join(";"),
           "params".freeze => {}
         }
       }
